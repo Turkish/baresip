@@ -371,7 +371,23 @@ static int stream_sock_alloc(struct stream *s, int af)
 		return EINVAL;
 
 	/* we listen on all interfaces */
-	sa_init(&laddr, af);
+	if (af == AF_UNSPEC) {
+		// Prioritize IPv4 if enabled, otherwise try IPv6
+		if (net_af_enabled(baresip_network(), AF_INET)) {
+			sa_set_in(&laddr, 0, 0); // Sets laddr to 0.0.0.0:0
+			af = AF_INET; // Update af to the chosen family
+		} else if (net_af_enabled(baresip_network(), AF_INET6)) {
+			sa_set_in6(&laddr, &in6addr_any, 0); // Sets laddr to [::]:0
+			af = AF_INET6; // Update af to the chosen family
+		} else {
+			// No address family (IPv4 or IPv6) is enabled in baresip configuration
+			warning("stream: no address family enabled for AF_UNSPEC\n");
+			return EAFNOSUPPORT;
+		}
+	} else {
+		// For specific address families (AF_INET, AF_INET6), initialize normally
+		sa_init(&laddr, af);
+	}
 
 	err = rtp_listen(&s->rtp, IPPROTO_UDP, &laddr,
 			 s->cfg.rtp_ports.min, s->cfg.rtp_ports.max,
