@@ -949,6 +949,14 @@ int ua_call_alloc(struct call **callp, struct ua *ua,
 		sa_init(&ua->dst, AF_UNSPEC);
 		sa_cpy(&cprm.laddr, laddr);
 	}
+	else {
+		/* Initialize laddr with proper address family when not set */
+		if (af == AF_INET) {
+			sa_set_in(&cprm.laddr, 0, 0); /* 0.0.0.0:0 */
+		} else if (af == AF_INET6) {
+			sa_set_in6(&cprm.laddr, (const uint8_t *)&in6addr_any, 0); /* [::]:0 */
+		}
+	}
 
 	cprm.vidmode = vmode;
 	cprm.af      = af;
