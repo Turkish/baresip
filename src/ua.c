@@ -920,6 +920,11 @@ int ua_call_alloc(struct call **callp, struct ua *ua,
 		af = sa_af(laddr);
 	}
 
+	/* If af is still unspecified, use the configured network address family */
+	if (af == AF_UNSPEC) {
+		af = net_af(net);
+	}
+
 	if (af != AF_UNSPEC && !net_af_enabled(net, af)) {
 		warning("ua: address family %s not supported\n",
 				net_af2name(af));

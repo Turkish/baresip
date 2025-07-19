@@ -612,6 +612,22 @@ int net_set_af(struct network *net, int af)
 }
 
 
+/**
+ * Get the configured address family for the network
+ *
+ * @param net Network instance
+ *
+ * @return Configured address family (AF_INET, AF_INET6, or AF_UNSPEC)
+ */
+int net_af(const struct network *net)
+{
+	if (!net)
+		return AF_UNSPEC;
+
+	return net->cfg.af;
+}
+
+
 bool net_ifaddr_filter(const struct network *net, const char *ifname,
 			      const struct sa *sa)
 {
