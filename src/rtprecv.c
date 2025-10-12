@@ -322,6 +322,38 @@ static void decode_tmr(void *arg)
 }
 
 
+static void rtprecv_resync(struct rtp_receiver *rx,
+			 const struct rtp_header *hdr,
+			 uint32_t old_ssrc,
+			 const struct sa *src,
+			 size_t payload_len)
+{
+	if (!rx || !hdr)
+		return;
+
+	if (rx->jbuf)
+		jbuf_flush(rx->jbuf);
+
+	mtx_lock(rx->mtx);
+	rx->ssrc = hdr->ssrc;
+	rx->ssrc_set = true;
+	rx->pseq = (uint16_t)(hdr->seq - 1);
+	rx->pseq_set = true;
+	rx->pt = -1;
+	rx->pt_tel = 0;
+	mtx_unlock(rx->mtx);
+
+	if (src) {
+		info("rtprecv: %s: SSRC change %08x -> %08x (seq=%u ts=%u payload=%zu from %J)\n",
+		     rx->name, old_ssrc, hdr->ssrc, hdr->seq, hdr->ts, payload_len, src);
+	}
+	else {
+		info("rtprecv: %s: SSRC change %08x -> %08x (seq=%u ts=%u payload=%zu)\n",
+		     rx->name, old_ssrc, hdr->ssrc, hdr->seq, hdr->ts, payload_len);
+	}
+}
+
+
 /**
  * Decode RTP packets
  *
@@ -387,11 +419,12 @@ static bool rtprecv_filter_pt(struct rtp_receiver *rx,
 
 
 void rtprecv_decode(const struct sa *src, const struct rtp_header *hdr,
-		     struct mbuf *mb, void *arg)
+	     struct mbuf *mb, void *arg)
 {
 	struct rtp_receiver *rx = arg;
 	uint32_t ssrc0;
 	bool flush = false;
+	uint32_t old_ssrc = 0;
 	int err = 0;
 
 	if (!rx)
@@ -433,14 +466,10 @@ void rtprecv_decode(const struct sa *src, const struct rtp_header *hdr,
 		rx->pseq_set = true;
 	}
 	else if (hdr->ssrc != ssrc0) {
-
-		debug("rtprecv: %s: SSRC changed 0x%x -> 0x%x"
-		     " (%zu bytes from %J)\n",
-		     rx->name, ssrc0, hdr->ssrc,
-		     mbuf_get_left(mb), src);
-
 		rx->ssrc = hdr->ssrc;
-		rx->pseq = hdr->seq - 1;
+		rx->ssrc_set = true;
+		rx->pseq_set = false;
+		old_ssrc = ssrc0;
 		flush = true;
 	}
 	mtx_unlock(rx->mtx);
@@ -454,7 +483,7 @@ void rtprecv_decode(const struct sa *src, const struct rtp_header *hdr,
 	if (rx->jbuf) {
 		/* Put frame in Jitter Buffer */
 		if (flush)
-			jbuf_flush(rx->jbuf);
+			rtprecv_resync(rx, hdr, old_ssrc, src, mbuf_get_left(mb));
 
 		err = jbuf_put(rx->jbuf, hdr, mb);
 		if (err) {
