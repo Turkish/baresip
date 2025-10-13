@@ -289,8 +289,7 @@ void aurecv_receive(struct audio_recv *ar, const struct rtp_header *hdr,
 		ar->ssrc = hdr->ssrc;
 		ar->ts_recv.is_set = false;
 		ar->ts_recv.num_wraps = 0;
-		if (ar->aubuf)
-			aubuf_flush(ar->aubuf);
+		aubuf_flush(ar->aubuf);
 	}
 
 	if (hdr->pt != ar->pt) {

@@ -406,7 +406,7 @@ static bool rtprecv_filter_pt(struct rtp_receiver *rx,
 
 
 void rtprecv_decode(const struct sa *src, const struct rtp_header *hdr,
-		 struct mbuf *mb, void *arg)
+		     struct mbuf *mb, void *arg)
 {
 	struct rtp_receiver *rx = arg;
 	uint32_t ssrc0;
@@ -452,6 +452,12 @@ void rtprecv_decode(const struct sa *src, const struct rtp_header *hdr,
 		rx->pseq_set = true;
 	}
 	else if (hdr->ssrc != ssrc0) {
+
+		debug("rtprecv: %s: SSRC changed 0x%x -> 0x%x"
+		     " (%zu bytes from %J)\n",
+		     rx->name, ssrc0, hdr->ssrc,
+		     mbuf_get_left(mb), src);
+
 		rx->ssrc = hdr->ssrc;
 		rx->ssrc_set = true;
 		rx->pseq_set = false;
