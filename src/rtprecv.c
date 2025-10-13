@@ -328,8 +328,7 @@ static void rtprecv_resync(struct rtp_receiver *rx,
 	if (!rx || !hdr)
 		return;
 
-	if (rx->jbuf)
-		jbuf_flush(rx->jbuf);
+	jbuf_flush(rx->jbuf);
 
 	mtx_lock(rx->mtx);
 	rx->ssrc = hdr->ssrc;
