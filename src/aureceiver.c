@@ -60,8 +60,6 @@ struct audio_recv {
 		RE_ATOMIC uint64_t latency;   /**< Latency in [ms]           */
 		int32_t jitter;       /**< Auframe push jitter [us]          */
 		int32_t dmax;         /**< Max deviation [us]                */
-		uint64_t n_decoded;   /**< Debug: number of decoded frames   */
-		uint64_t n_pushed;    /**< Debug: frames pushed to aubuf     */
 	} stats;
 
 	mtx_t *mtx;
@@ -228,9 +226,6 @@ static int aurecv_stream_decode(struct audio_recv *ar,
 		return 0;
 
 	/* TODO: PLC */
-	if (lostc) {
-		info("audio_recv: lostc=%u seq=%u ssrc=%08x\n", lostc, hdr->seq, hdr->ssrc);
-	}
 	if (lostc && ac->plch) {
 
 		err = ac->plch(ar->dec,
@@ -267,29 +262,10 @@ static int aurecv_stream_decode(struct audio_recv *ar,
 	}
 
 	err = aurecv_process_decfilt(ar, &af);
-	if (err) {
-		warning("audio_recv: decode filter error (%m)\n", err);
+	if (err)
 		goto out;
-	}
-
-	ar->stats.n_decoded++;
-	if (ar->stats.n_decoded <= 10 || ar->stats.n_decoded % 200 == 0) {
-		info("audio_recv: decoded frame #%llu (seq=%u ts=%u ssrc=%08x)\n",
-		     (unsigned long long)ar->stats.n_decoded, hdr->seq, hdr->ts,
-		     hdr->ssrc);
-	}
 
 	err = aurecv_push_aubuf(ar, &af);
-	if (!err) {
-		ar->stats.n_pushed++;
-		if (ar->stats.n_pushed <= 10 || ar->stats.n_pushed % 200 == 0) {
-			size_t cur = ar->aubuf ? aubuf_cur_size(ar->aubuf) : 0;
-			info("audio_recv: pushed frame #%llu (aubuf_cur=%zu bytes)\n",
-			     (unsigned long long)ar->stats.n_pushed, cur);
-		}
-	} else {
-		warning("audio_recv: aubuf push error (%m)\n", err);
-	}
  out:
 	return err;
 }
@@ -310,22 +286,14 @@ void aurecv_receive(struct audio_recv *ar, const struct rtp_header *hdr,
 
 	mtx_lock(ar->mtx);
 	if (hdr->ssrc != ar->ssrc) {
-		info("audio_recv: SSRC change %08x -> %08x (seq=%u ts=%u)\n",
-		     ar->ssrc, hdr->ssrc, hdr->seq, hdr->ts);
 		ar->ssrc = hdr->ssrc;
 		ar->ts_recv.is_set = false;
 		ar->ts_recv.num_wraps = 0;
-		aubuf_flush(ar->aubuf);
+		if (ar->aubuf)
+			aubuf_flush(ar->aubuf);
 	}
 
 	if (hdr->pt != ar->pt) {
-		static uint64_t last_pt_log;
-		uint64_t now = tmr_jiffies_usec();
-		if (!last_pt_log || (now - last_pt_log) >= 1000000ULL) {
-			info("audio_recv: ignoring pt=%u (expected %u) ssrc=%08x\n",
-			     hdr->pt, ar->pt, ar->ssrc);
-			last_pt_log = now;
-		}
 		mtx_unlock(ar->mtx);
 		*ignore = true;
 		return;
@@ -353,8 +321,6 @@ void aurecv_receive(struct audio_recv *ar, const struct rtp_header *hdr,
 		warning("audio_recv: rtp timestamp wraps backwards"
 			" (delta = %d) -- discard\n",
 			(int32_t)(ar->ts_recv.last - hdr->ts));
-		info("audio_recv: discard frame seq=%u ts=%u prev_ts=%u ssrc=%08x\n",
-		     hdr->seq, hdr->ts, ar->ts_recv.last, hdr->ssrc);
 		discard = true;
 		break;
 
