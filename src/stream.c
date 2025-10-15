@@ -1613,6 +1613,15 @@ int stream_ssrc_rx(const struct stream *strm, uint32_t *ssrc)
 }
 
 
+bool stream_consume_ssrc_change(struct stream *strm, uint32_t *ssrc)
+{
+	if (!strm)
+		return false;
+
+	return rtprecv_consume_ssrc_change(strm->rx, ssrc);
+}
+
+
 void stream_mnat_attr(struct stream *strm, const char *name, const char *value)
 {
 	if (!strm)

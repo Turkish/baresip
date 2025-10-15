@@ -42,7 +42,8 @@ struct audio_recv {
 	const struct aucodec *ac;     /**< Current audio decoder             */
 	struct aubuf *aubuf;          /**< Audio buffer before auplay        */
 	mtx_t *aubuf_mtx;             /**< Mutex for aubuf allocation        */
-	uint32_t ssrc;                /**< Incoming synchronization source   */
+	uint32_t ssrc_remote;         /**< Last observed remote SSRC         */
+	bool ssrc_remote_valid;       /**< True if remote SSRC is known      */
 	struct list filtl;            /**< Audio filters in decoding order   */
 	void *sampv;                  /**< Sample buffer                     */
 	size_t sampvsz;               /**< Sample buffer size                */
@@ -272,24 +273,39 @@ static int aurecv_stream_decode(struct audio_recv *ar,
 
 
 /* Handle incoming stream data from the network */
-void aurecv_receive(struct audio_recv *ar, const struct rtp_header *hdr,
-		    struct rtpext *extv, size_t extc,
+void aurecv_receive(struct audio_recv *ar, struct stream *strm,
+		    const struct rtp_header *hdr, struct rtpext *extv, size_t extc,
 		    struct mbuf *mb, unsigned lostc, bool *ignore)
 {
 	bool discard = false;
 	bool drop = *ignore;
 	int wrap;
 	(void) lostc;
+	bool ssrc_changed = false;
+	uint32_t ssrc = 0;
+	bool have_ssrc = false;
+
+	if (strm) {
+		ssrc_changed = stream_consume_ssrc_change(strm, &ssrc);
+		have_ssrc = ssrc_changed;
+		if (!have_ssrc && stream_ssrc_rx(strm, &ssrc) == 0)
+			have_ssrc = true;
+	}
 
 	if (!mb)
 		return;
 
 	mtx_lock(ar->mtx);
-	if (hdr->ssrc != ar->ssrc) {
-		ar->ssrc = hdr->ssrc;
+	if (ssrc_changed) {
+		ar->ssrc_remote = ssrc;
+		ar->ssrc_remote_valid = true;
 		ar->ts_recv.is_set = false;
 		ar->ts_recv.num_wraps = 0;
 		aubuf_flush(ar->aubuf);
+	}
+	else if (!ar->ssrc_remote_valid && have_ssrc) {
+		ar->ssrc_remote = ssrc;
+		ar->ssrc_remote_valid = true;
 	}
 
 	if (hdr->pt != ar->pt) {

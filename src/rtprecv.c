@@ -27,6 +27,7 @@ struct rtp_receiver {
 	uint64_t ts_last;              /**< Timestamp of last recv RTP pkt   */
 	uint32_t ssrc;                 /**< Incoming synchronization source  */
 	bool ssrc_set;                 /**< Incoming SSRC is set             */
+	bool ssrc_changed;             /**< SSRC changed since last poll     */
 	uint32_t pseq;                 /**< Sequence number for incoming RTP */
 	bool pseq_set;                 /**< True if sequence number is set   */
 	bool rtp_estab;                /**< True if RTP stream established   */
@@ -337,6 +338,7 @@ static void rtprecv_resync(struct rtp_receiver *rx,
 	rx->pseq_set = true;
 	rx->pt = -1;
 	rx->pt_tel = 0;
+	rx->ssrc_changed = true;
 	mtx_unlock(rx->mtx);
 }
 
@@ -471,11 +473,11 @@ void rtprecv_decode(const struct sa *src, const struct rtp_header *hdr,
 			return;
 	}
 
+	if (flush)
+		rtprecv_resync(rx, hdr);
+
 	if (rx->jbuf) {
 		/* Put frame in Jitter Buffer */
-		if (flush)
-			rtprecv_resync(rx, hdr);
-
 		err = jbuf_put(rx->jbuf, hdr, mb);
 		if (err) {
 			info("rtprecv: %s: dropping %zu bytes from %J"
@@ -646,6 +648,28 @@ int rtprecv_get_ssrc(struct rtp_receiver *rx, uint32_t *ssrc)
 	return err;
 }
 
+
+bool rtprecv_consume_ssrc_change(struct rtp_receiver *rx, uint32_t *ssrc)
+{
+	bool changed = false;
+
+	if (!rx)
+		return false;
+
+	mtx_lock(rx->mtx);
+	if (rx->ssrc_changed) {
+		rx->ssrc_changed = false;
+		if (rx->ssrc_set && ssrc)
+			*ssrc = rx->ssrc;
+		changed = true;
+	}
+	else if (ssrc && rx->ssrc_set) {
+		*ssrc = rx->ssrc;
+	}
+	mtx_unlock(rx->mtx);
+
+	return changed;
+}
 
 struct jbuf *rtprecv_jbuf(struct rtp_receiver *rx)
 {

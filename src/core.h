@@ -135,8 +135,8 @@ void aurecv_flush(struct audio_recv *ar);
 void aurecv_set_extmap(struct audio_recv *ar, uint8_t aulevel);
 int  aurecv_set_module(struct audio_recv *ar, const char *module);
 int  aurecv_set_device(struct audio_recv *ar, const char *device);
-void aurecv_receive(struct audio_recv *ar, const struct rtp_header *hdr,
-		    struct rtpext *extv, size_t extc,
+void aurecv_receive(struct audio_recv *ar, struct stream *strm,
+		    const struct rtp_header *hdr, struct rtpext *extv, size_t extc,
 		    struct mbuf *mb, unsigned lostc, bool *ignore);
 int  aurecv_start_player(struct audio_recv *ar, struct list *auplayl);
 bool aurecv_player_started(const struct audio_recv *ar);
@@ -350,6 +350,7 @@ int  stream_resend(struct stream *s, uint16_t seq, bool ext, bool marker,
 /* Receive */
 void stream_flush(struct stream *s);
 int  stream_ssrc_rx(const struct stream *strm, uint32_t *ssrc);
+bool stream_consume_ssrc_change(struct stream *strm, uint32_t *ssrc);
 
 
 struct bundle *stream_bundle(const struct stream *strm);
@@ -522,6 +523,7 @@ void rtprecv_set_ts_last(struct rtp_receiver *rx, uint64_t ts_last);
 void rtprecv_flush(struct rtp_receiver *rx);
 void rtprecv_enable(struct rtp_receiver *rx, bool enable);
 int  rtprecv_get_ssrc(struct rtp_receiver *rx, uint32_t *ssrc);
+bool rtprecv_consume_ssrc_change(struct rtp_receiver *rx, uint32_t *ssrc);
 void rtprecv_enable_mux(struct rtp_receiver *rx, bool enable);
 int  rtprecv_debug(struct re_printf *pf, const struct rtp_receiver *rx);
 int  rtprecv_start_thread(struct rtp_receiver *rx);
